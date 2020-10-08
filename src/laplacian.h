@@ -19,4 +19,3 @@ int create_permutation(const pmp::SurfaceMesh &mesh, Eigen::PermutationMatrix<Ei
 void poly_harmonic_interpolation(const pmp::SurfaceMesh &mesh, Eigen::Ref<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > u, int k=1);
 
 #endif // LAPLACIAN_H
-

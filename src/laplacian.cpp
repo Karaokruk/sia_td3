@@ -5,6 +5,7 @@
 
 using namespace Eigen;
 using namespace pmp;
+using namespace std;
 
 typedef SparseMatrix<float> SpMat;
 typedef PermutationMatrix<Dynamic> Permutation;
@@ -24,7 +25,23 @@ void create_laplacian_matrix(const SurfaceMesh &mesh, SpMat &L,
   // number of vertices in mesh
   int n = (int)mesh.n_vertices();
 
-  // TODO
+  typedef Eigen::Triplet<double> T;
+  std::vector<T> tripletList;
+  tripletList.reserve(n * n);
+
+  int i, j, v_ij;
+  for (auto vj : mesh.vertices()) {
+    i = vj.idx();
+    v_ij = 0;
+    for (auto neighbor : mesh.vertices(vj)) {
+      j = vj.idx();
+      tripletList.push_back(T(i, j, -1));
+      v_ij++;
+    }
+    tripletList.push_back(T(i, i, v_ij));
+    //cout << i << endl;
+  }
+  L.setFromTriplets(tripletList.begin(), tripletList.end());
 }
 
 /// Computes the permutation putting selected vertices (mask==1) first, and the
@@ -54,11 +71,19 @@ void poly_harmonic_interpolation(const SurfaceMesh &mesh,
   // 1 - Create the sparse Laplacian matrix
   SpMat L(n,n);
   create_laplacian_matrix(mesh, L, false);
+  cout << L.nonZeros() << endl;
 
   // 2 - Create the permutation matrix putting the fixed values at the end,
   //     and the true unknown at the beginning
   Permutation perm;
   int nb_unknowns = create_permutation(mesh, perm);
+
+  /*
+  if (masks[vj]) {
+
+  }
+  perm.indices()[???] = ???;
+  */
 
   // 3 - Apply the permutation to both rows (equations) and columns (unknowns),
   //     i.e., L = P * L * P^-1

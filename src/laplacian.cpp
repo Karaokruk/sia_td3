@@ -1,3 +1,4 @@
+#undef NDEBUG
 
 #include "laplacian.h"
 #include "mesh.h"
@@ -27,16 +28,15 @@ void create_laplacian_matrix(const SurfaceMesh &mesh, SpMat &L,
 
   typedef Eigen::Triplet<double> T;
   std::vector<T> tripletList;
-  tripletList.reserve(n * n);
-
+  //tripletList.reserve(n * n);
   int i, j, v_ij;
   for (auto vj : mesh.vertices()) {
     i = vj.idx();
     v_ij = 0;
     for (auto neighbor : mesh.vertices(vj)) {
-      j = vj.idx();
-      tripletList.push_back(T(i, j, -1));
-      v_ij++;
+      j = neighbor.idx();
+      tripletList.push_back(T(i, j, 1));
+      v_ij--;
     }
     tripletList.push_back(T(i, i, v_ij));
     //cout << i << endl;
@@ -53,8 +53,20 @@ int create_permutation(const SurfaceMesh &mesh, Permutation &perm) {
   int n = (int)mesh.n_vertices();
 
   // TODO
+  perm.resize(n);
+  int i, j;
+  int nb_selected_vertices = 0;
+  for (auto vj : mesh.vertices()) {
+    i = vj.idx();
+    if (masks[vj] == 1) {
+      perm.indices()[nb_selected_vertices] = i;
+      perm.indices()[i] = nb_selected_vertices;
+      nb_selected_vertices++;
+      //cout << "i: " << i << " --- nb selected vertices: " << nb_selected_vertices << endl;
+    } else perm.indices()[i] = i;
+  }
 
-  return 0;
+  return nb_selected_vertices;
 }
 
 /// Performs the poly-harmonic interpolation (order k) over the selected
@@ -70,6 +82,8 @@ void poly_harmonic_interpolation(const SurfaceMesh &mesh,
 
   // 1 - Create the sparse Laplacian matrix
   SpMat L(n,n);
+  //cout << "n:" << n << endl;
+  //cout << "L size : " << L.size() << endl;
   create_laplacian_matrix(mesh, L, false);
   cout << L.nonZeros() << endl;
 
@@ -77,16 +91,13 @@ void poly_harmonic_interpolation(const SurfaceMesh &mesh,
   //     and the true unknown at the beginning
   Permutation perm;
   int nb_unknowns = create_permutation(mesh, perm);
-
-  /*
-  if (masks[vj]) {
-
-  }
-  perm.indices()[???] = ???;
-  */
+  //for (int i = 0 ; i < n ; i++) cout << "perm[i]: " << perm.indices()[i] << endl;
 
   // 3 - Apply the permutation to both rows (equations) and columns (unknowns),
   //     i.e., L = P * L * P^-1
+  L = perm * L;
+  L = L * perm.inverse();
+  //L = L.twistedBy(perm);
 
   // TODO
 

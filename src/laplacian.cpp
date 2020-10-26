@@ -10,6 +10,7 @@ using namespace std;
 
 typedef SparseMatrix<float> SpMat;
 typedef PermutationMatrix<Dynamic> Permutation;
+typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Mat;
 
 double cotan_weight(const SurfaceMesh &mesh, pmp::Halfedge he) {
   auto points = mesh.get_vertex_property<Point>("v:point");
@@ -36,7 +37,7 @@ void create_laplacian_matrix(const SurfaceMesh &mesh, SpMat &L,
     for (auto neighbor : mesh.vertices(vj)) {
       j = neighbor.idx();
       tripletList.push_back(T(i, j, 1));
-      v_ij--;
+      v_ij++;
     }
     tripletList.push_back(T(i, i, v_ij));
     //cout << i << endl;
@@ -75,7 +76,7 @@ int create_permutation(const SurfaceMesh &mesh, Permutation &perm) {
 ///     otherwise, mask[V]==1, and u.col(i) is replaced by the poly-harmonic
 ///     interpolation of the fixed values.
 void poly_harmonic_interpolation(const SurfaceMesh &mesh,
-                                 Ref<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> > u,
+                                 Ref<Mat> u,
                                  int k) {
   // Number of vertices in the mesh
   int n = (int)mesh.n_vertices();
@@ -85,27 +86,43 @@ void poly_harmonic_interpolation(const SurfaceMesh &mesh,
   //cout << "n:" << n << endl;
   //cout << "L size : " << L.size() << endl;
   create_laplacian_matrix(mesh, L, false);
-  cout << L.nonZeros() << endl;
+  //cout << "nb non-zeros in L : " << L.nonZeros() << endl;
 
   // 2 - Create the permutation matrix putting the fixed values at the end,
   //     and the true unknown at the beginning
   Permutation perm;
   int nb_unknowns = create_permutation(mesh, perm);
+  cout << "nb unknowns : " << nb_unknowns << endl;
   //for (int i = 0 ; i < n ; i++) cout << "perm[i]: " << perm.indices()[i] << endl;
 
   // 3 - Apply the permutation to both rows (equations) and columns (unknowns),
   //     i.e., L = P * L * P^-1
-  L = perm * L;
-  L = L * perm.inverse();
-  //L = L.twistedBy(perm);
-
-  // TODO
+  L = L.twistedBy(perm);
+  // Perform k-harmonic interpolation
+  //for (int i = 1 ; i < k ; i++) L *= L;
 
   // 4 - solve L * [x^T u^T]^T = 0, i.e., L00 x = - L01 * u
-
-  // TODO
+  // solve Ax = b
+  u = perm * u;
+  SimplicialLDLT<SpMat> solver;
+  SpMat A = L.topLeftCorner(nb_unknowns, nb_unknowns);
+  solver.compute(A);
+  if (solver.info() != Success) {
+    cerr << "Cholesky factorisation failed.\n";
+    return;
+  }
+  Mat b = -1 * L.topRightCorner(nb_unknowns, n - nb_unknowns) * u.bottomRows(n - nb_unknowns);
+  Mat x = solver.solve(b);
+  if (solver.info() != Success) {
+    cerr << "Cholesky factorisation failed.\n";
+    return;
+  }
 
   // 5 - Copy back the results to u
-
-  // TODO
+  for (int i = 0 ; i < nb_unknowns ; i++) {
+    for (int j = 0 ; j < 3 ; j++) {
+      u(i, j) = x(i, j);
+    }
+  }
+   u = perm.inverse() * u;
 }

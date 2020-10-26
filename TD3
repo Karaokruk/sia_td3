@@ -1,0 +1,240 @@
+TD3 - Interpolation et déformation poly-harmonique
+
+L'objectif de ce TD est de mettre en oeuvre une méthode d'éléments finis pour la résolution de l'équation de Laplace sur un maillage triangulaire. Cette brique de base nous permettra de mettre en oeuvre différentes applications :
+
+    Reconstruction poly-harmonique
+    Bouchage de trous
+    Déformation interactive
+    Paramétrisation pour l'application d'une texture sur un maillage
+
+Toutes ces applications suivent le même principe :
+
+    Définir un attribut à reconstruire, par exemple positions, couleurs, coordonnées de textures, déplacements, etc., que nous appelleront uu
+
+Partitionner l'ensemble V
+des sommets du maillage en deux sous ensembles :
+
+    V¯
+
+dont les valeurs des attributs sont fixées à u¯i, c'est-à-dire : ui=u¯i,  ∀i∈V¯
+,
+et V∖V¯
+dont les valeurs ui (i∈V∖V¯
+
+    ) vont être reconstruites par interpolation (poly-)harmonique.
+
+Construire la matrice Laplacienne pour l'ensemble du maillage
+Éventuellement, en déduire la matrice bi- ou tri-Laplacienne si une interpolation bi- ou tri-harmonique est souhaitée.
+Ré-ordonner la matrice Laplacienne et le vecteur (ou matrice) d'attributs uu
+de tel sorte que les inconnues ui (i∈V∖V¯
+
+    ) soient en première position.
+    Résoudre le système d'équations linéaires en utilisant Eigen.
+    Mettre à jour le maillage avec les nouvelles valeurs reconstruites.
+
+La mise en oeuvre de ces différentes étapes est détaillée dans la suite.
+1. Prise en main
+
+Ce TP est construit sur une base de code similaire aux précédents. Une aide d’utilisation de l’application est affichée sur la sortie standard au démarrage de l’application, et est reproduite ci-dessous :
+
+Usage: ./mesh_proc [file]
+  where must be a mesh file (e.g. .off)
+
+**************************************************
+Selection:
+  ctrl+left+drag: selection
+  s:    enable/disable display of selected vertices
+  c:    clear the selection
+Mesh processing:
+  y/Y:  decrease/increase selection brush size
+
+  1:    perform harmonic interpolation
+  2:    perform bi-harmonic interpolation
+  3:    perform tri-harmonic interpolation
+
+Display:
+  r:    reload shaders
+  w:    enable/disable wireframe
+  t:    enable/disable texturing
+  g:    enable/disable cold-warm shading
+  s:    enable/disable display of selected vertices
+Camera:
+  mouse left+drag:      camera rotation
+**************************************************
+
+Comme précédemment, ce projet utilise la classe SurfaceMesh de la bibliothèque "pmp-library" (doc) pour représenter nos maillages, et la bibliothèque Eigen pour tout ce qui est matrices, vecteurs et solveurs linéaires (résumé de l'API).
+
+L’application est gérée par la classe MeshProcessingApp. Voici les principaux éléments qui nous seront utiles ici :
+
+    Le projet considère un objet principal référencé par la variable MeshProcessingApp::_mesh. Le maillage peut être spécifié en ligne de commande, par exemple :
+
+    $ ./mesh_proc ../data/models/bunny.off
+
+    L'application permet déjà de sélectionner des sommets en cliquant-déplaçant la souris sur le maillage avec la touche ctrl enfoncée. Cette information est stockée dans l’attribut v:mask de la structure en halfedge. Dans la suite, l'ensemble V∖V¯
+
+sera donc défini par l'ensemble des sommets sélectionnés, et V¯
+correspond donc aux sommets non-sélectionnés. L'étape 2 est donc déjà réalisée.
+La classe Mesh expose chacun des attributs des sommets sous la forme d'une matrice Eigen (en lecture et écriture) où chaque colonne correspond à un sommet. Par exemple la méthode Mesh::colors() retourne une matrice 3×N
+(avec N le nombre de sommets) où Mesh::colors().col(i) retourne un vecteur colonne contenant les composantes rouge, verte et bleue du sommet numéro i
+
+    . Ces fonctions seront particulièrement utiles pour changer l'attribut sur lequel appliquer la reconstruction.
+    Le fichier "src/laplacian.cpp" contient un squelette des fonctions à mettre en oeuvre pour les étapes 3, 4 et 5.
+    La fonction de reconstruction à mettre en oeuvre est automatiquement appelée par la méthode MeshProcessingApp::charPressed lors d'un appui sur les touches 1, 2, ou 3.
+
+L'interpolation elle même est réalisée par les étapes 3 à 6 qui seront mises en oeuvre par la fonction :
+
+void poly_harmonic_interpolation(const Surface_mesh &mesh, Eigen::Ref<MatrixXf> u, int k) const
+
+du fichier "src/laplacian.cpp". Le type Eigen::Ref permet de référencer en lecture/écriture n'importe quelle matrice ou vecteur Eigen. En particulier, vous pouvez lui passer les matrices d'attributs présentées précédemment. Voir les commentaires dans le fichier pour les détails.
+
+Conseil : pour ce TP vous avez uniquement besoin modifier le fichier "src/laplacian.cpp" et la fonction MeshProcessingApp::charPressed aux emplacement des TODO.
+2. Création de la matrice Laplacienne
+
+Il s'agit du coeur du TD. En effet, le problème d'interpolation harmonique revient à résoudre l'équation Δu=0
+(avec des contraintes). Dans notre application, la fonction u
+
+pourra représenter n'importe quels attributs des sommets. Comme vu en cours, cette équation peut être discrétisée de la manière suivante :
+
+Δu(vi):=∑vj∈N1(vi)wij(uj−ui)(1)
+
+où N1(vi)
+dénote l'ensemble des sommets du premier voisinage du sommet vi, et wij est le poids associé à l'arête i−j. Ce système d'équation peut être mis sous forme matricielle Luu=0 avec L la matrice Laplacienne de taille N×N
+
+, avec :
+
+LijLii=wijsi i≠j(2)=−∑vj∈N1(vi)wij
+
+Pour cette étape, vous allez devoir mettre en oeuvre la fonction :
+
+void create_laplacian_matrix(const Surface_mesh &mesh, SpMat& L, bool useCotWeights) const
+
+dans le fichier "src/laplacian.cpp" dont le but est de remplir la matrice L. Comme cette matrice est principalement composée de zéros (matrice creuse), nous nous servirons de la classe SparseMatrix d'Eigen. Dans un premier temps, nous utiliserons une version simplifiée de la formule du Laplacien en fixant les poids wij
+à 1 dans l'équation (1)
+
+.
+
+Pour l'utilisation et le remplissage d'une matrice de type SparseMatrix, se référer à la documentation d'Eigen : TutorialSparse.
+
+Pour la mise en oeuvre, il est conceptuellement plus simple de parcourir le maillage par sommet en utilisant la structure de halfedge pour parcourir les sommets voisins.
+3. Isolation des inconnues (ré-ordonnancement)
+
+Nous venons de remplir notre matrice Laplacienne pour l'ensemble de nos sommets, or, seulement une partie de nos sommets a besoin d'être mis à jour, c'est-à-dire ceux dont l'attribut v:mask est à 1. Il faut donc réordonner les équations et les sommets afin d'isoler les inconnues. Pour cela, vous pouvez construire et appliquer une matrice de permutation via la classe Eigen::PermutationMatrix.
+
+Voici un exemple d'utilisation de la classe PermutationMatrix :
+
+PermutationMatrix<Dynamic, Dynamic, int> perm;
+// Resize the permutation at the correct size
+perm.resize(n);
+
+// Construct a permutation inversing the order of the elements.
+// For n=3, we have:
+//        [ 0 0 1 ]
+// perm = [ 0 1 0 ]
+//        [ 1 0 0 ]
+for(int i=0; i<n; ++i)
+  perm.indices()[i] = n-1-i;
+
+// Apply it on a column vector
+// Equivalent to v[perm[i]] = v[i], forall i
+    v = perm * v;
+// Permutes the lines of a matrix:
+    m = perm * m;
+// Permutes the columns of a matrix:
+    m = m * perm.inverse();
+// Apply a symmetric permutation, permute both rows and columns:
+// Equalivalent to perm * m * perm.inverse(), but faster
+    m = m.twistedBy(perm);
+
+Une fois la permutation appliquée, il est possible de décomposer le système de la manière suivante :
+
+(L00L10L01L11)(UU¯)=(00)(3)
+
+où U
+est la matrice des attributs des sommets à calculer, et U¯
+
+la matrice des attributs des sommets fixés.
+
+Comme les sous matrices L10
+et L11
+
+correspondent aux sommets contraints, le système peut être simplifié en :
+
+L00U=−L01U¯(4)
+
+Il est possible d'extraire une sous-partie d'une matrice ou d'un vecteur de la manière suivante :
+
+mat.topLeftCorner(rows,cols)
+mat.bottomRightCorner(rows,cols)
+
+mat.topRows(rows);
+mat.bottomRows(rows);
+
+Pour plus de détails, se référer à la documentation d'Eigen : QuickRef.
+4. Résolution du système
+
+Finalement, pour obtenir les nouvelles positions des sommets, le système de l'équation (4)
+
+doit être résolu. Pour ce type de problème, il est recommandé d'utiliser une factorisation de Cholesky, comme implémentée par la classe SimplicialLDLT de Eigen. Se référer au premier exemple de la documentation.
+
+Une fois les solutions obtenues, il faut les remettre dans l'ordre en appliquant la permutation inverse (perm.inverse()) et mettre à jour les colonnes correspondante de la matrice u.
+
+Pour tester, lancer l'application et presser la touche 1. Vous pouvez aussi tester les modèles"colorfull.off" et"bunny_70k_color.off" pour reconstruire des informations de couleurs (voir la méthode MeshProcessingApp::charPressed). Par exemple, essayez de boucher les "trous"' du premier.
+5. Reconstruction bi-harmonique et tri-harmonique
+
+Afin d'avoir des résultats plus lisses, il est possible de faire une reconstruction d'ordre supérieur (k) en appliquant l'opérateur Laplacien k fois.
+
+Système d'équation bi-harmonique :
+
+(L∗L)∗U=0
+
+Système d'équation tri-harmonique :
+
+(L∗L∗L)∗U=0
+
+6. Formule des co-tangentes
+
+Jusqu'à présent, nous avons utilisé une version simplifiée (équation (1)
+
+) de la formule du Laplacien qui suppose un maillage triangulaire parfaitement régulier (valence 6, triangle équilatéraux).
+
+Mettre à jour la fonction du calcul de la matrice Laplacienne en prenant pour les poids :
+
+wij=(cotαi,j+cotβi,j)/2
+
+Remarquez que vous pouvez calculer les cosinus et les sinus des angles directement à partir du produit scalaire et du produit vectoriel.
+7. Déformation interactive
+
+L'objectif ici est de mettre en oeuvre un outils de déformation interactif fonctionnant selon le principe suivant :
+
+    Comme précédemment, l'utilisateur défini la zone de déformation avec l'outil de sélection.
+    Ensuite, l'utilisateur sélectionne un sommet de position ppi
+
+de la zone sélectionnée et le déplace à la position pp′i
+(utiliser la fonction MeshProcessingApp::pickAt et prendre le sommet le plus proche comme dans MeshProcessingApp::selectAround).
+Ensuite le système réalise une interpolation poly-harmonique du champ de déplacement dd
+induit par ces contraintes, c'est-à -ire, un déplacement nul ddj=0 pour tous les sommets vj non sélectionnés, un déplacement ddi=pp′i−ppi pour le sommet vi
+qui a été déplacé. Le déplacement de tous les autres sommets est reconstruit par interpolation.
+Afficher le maillage déplacé pp′j=ppj+ddj
+
+    .
+
+Pour la mise en oeuvre, vous pouvez ajouter un attribut de déplacement à la classe Mesh et appliquer le déplacement dans le vertex shader. Cela évite de devoir stocker deux maillages.
+
+Pour le déplacement, dans un premier temps vous pouvez utiliser les touches du clavier pour déplacer le sommet le long de sa normale (plus simple qu'une interaction par la souris).
+
+Une fois que l'approche naive fonctionne, vous pouvez optimiser le processus en précalculant la matrice (poly-)Laplacienne une seule fois (le maillage de base reste constant), et précalculer la factorization de Cholesky dès que les sélections sont effectuées. En effet, lorsque le sommet est déplacé, seul le membre à droite de l'équation est modifié. Cela permet de mettre à jour le champ de déformation en temps réel lors du déplacement du sommet.
+8. Pour aller plus loin (bonus)
+Quelques suggestions pour les plus motivés !
+
+Paramétrisation
+
+Il est facile d'étendre l'application actuelle pour paramétrer un morceau de surface et lui appliquer une texture (i.e., une image). Pour cela, le plus facile est de charger une surface ouverte, de paramétrer les sommets du bord sur le cercle centré en (0.5,0.5)
+et de rayon 0.5
+
+(utiliser la structure en halfedge pour parcourir le bord), puis utiliser l'interpolation harmonique pour interpoler les coordonnées des textures au centre de la surface.
+
+Pour tester, appuyez sur la touche t pour activer l'application de la texture.
+Accélération de la construction de la matrice
+
+Afin d'accélérer le programme, il est possible de construire seulement la partie de la matrice Laplacienne qui nous intéresse. L'idée consiste à ne considérer que les sommets utiles pour la reconstruction. Dans le cas du Laplacien, il s'agit des sommets à mettre à jour et du premier anneau de voisinage définissant les contraintes. Pour le Bilaplacien, il faut aussi rajouter en plus le second anneau. Il est alors possible de construire directement la matrice L00
+et la matrice −L01C.

@@ -157,8 +157,8 @@ void MeshProcessingApp::charPressed(int key)
     int k = key-GLFW_KEY_1+1; // k = 1, 2 ou 3 (harmonique, bi-harmonique, tri-harmonique
     // TODO appeler _mesh->poly_harmonic_interpolation avec l'attribut que l'on souhaite reconstruire/interpoler,
     //      et mettre à jour le maillage en fonction de ce qui a été modifié
-    poly_harmonic_interpolation(*_mesh, _mesh->positions().transpose(), k);
-    // poly_harmonic_interpolation(*_mesh, _mesh->colors().transpose(), k);
+    // poly_harmonic_interpolation(*_mesh, _mesh->positions().transpose(), k);
+    poly_harmonic_interpolation(*_mesh, _mesh->colors().transpose(), k);
     _mesh->updateAll();
   }
   else

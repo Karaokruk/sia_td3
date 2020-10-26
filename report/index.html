@@ -1,0 +1,183 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>SIA - Célérier Adrien</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github-gist.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<script src="toc.min.js"></script>
+
+<script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+    MathJax.Hub.Config({
+      tex2jax: {
+        inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+        displayMath: [ ['$$','$$'], ["\\[","\\]"] ],
+        skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for(i=0; i < all.length; i += 1) {
+            all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+    });
+</script>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div id="toc"></div>
+
+<div id="content">
+
+<h1>SIA - Célérier Adrien</h1>
+
+<h2>TD 1 - Deferred Shading</h2>
+
+<h3>1. Remplissage du g-buffer</h3>
+
+<p>
+  Pour optimiser l'affichage de la scène de base, on utilise un g-buffer pour calculer seulement ce qui est visible dans la scène.<br>
+  Ce g-buffer contiendra pour chaque pixel sa couleur, sa normale et sa profondeur.<br>
+  Des shaders remplissent ce buffer qui sera utilisé après pour calculer l'éclairage.
+</p>
+
+<figure>
+  <img src="resources/deferred_shading_colors.png" width="400" alt="colors" />
+  <figcaption>Couleurs</figcaption>
+</figure>
+
+<figure>
+  <img src="resources/deferred_shading_norms.png" width="400" alt="norms" />
+  <figcaption>Normales</figcaption>
+</figure>
+
+<h3>2. Calcul de l'éclairage</h3>
+
+<p>
+  Le contenu du g-buffer est ensuite utilisé pour calculer l'éclairage.<br>
+  Un quad est placé devant la caméra de manière à process les shaders une seule fois pour chaque pixel visible.<br>
+  De nouveaux shaders sont donc utilisés pour calculer l'éclairage en fonction des textures du g-buffer.
+</p>
+
+<figure>
+  <img src="resources/deferred_shading_example1.png" width="400" alt="deferred_shading_example1" />
+  <figcaption>Couleurs</figcaption>
+</figure>
+
+<figure>
+  <img src="resources/deferred_shading_example2.png" width="400" alt="deferred_shading_example2" />
+  <figcaption>Normales</figcaption>
+</figure>
+
+<p>
+  Ces captures d'écran ne contiennent qu'une source lumineuse et n'exploitent donc pas pleinement le potentiel du deferred shading, mais le tout reste parfaitement fonctionnel, et gagnerait un temps significatif avec l'ajout de multiple sources lumineuses.
+</p>
+
+<h2>TD 2 - Shadow Volumes</h2>
+
+<h3>1. Construction des volumes d'ombres</h3>
+
+<p>
+  La première partie du TP est plutôt facile à la compréhension.<br>
+  La documentation <i>pmp</i> est intelligible et le code donné dans <b>Mesh::load</b> est très utile pour implémenter la fonction <b>Mesh::computeShadowVolume</b>.<br>
+  La difficulté a plutôt résidé dans les rappels d'algère par exemple pour les calculs d'orientation des faces par rapport à la source lumineuse.<br>
+  Une fois la mémoire rafraîchie, voici à quoi ressemble le volume d'ombre adaptée à une sphère :
+</p>
+
+<figure>
+  <img src="resources/maillage_wire.png" width="400" alt="maillage_wire" />
+  <figcaption>Maillage fil de fer</figcaption>
+</figure>
+
+En activant le face culling sur les faces (respectivement) visibles et non-visibles, on peut vérifier que les quads créés sont bien orientés.
+
+<figure>
+  <img src="resources/front_face_culling.png" width="400" alt="front_face_culling" />
+  <figcaption>Front Face Culling</figcaption>
+</figure>
+
+<figure>
+  <img src="resources/back_face_culling.png" width="400" alt="back_face_culling" />
+  <figcaption>Back Face Culling</figcaption>
+</figure>
+
+<h3>2. Comptage des entrées et sorties</h3>
+
+<p>
+  Il s'agit ensuite d'afficher les ombres portées.<br>
+  Pour cela, on écrit d'abord dans le depth buffer avant d'écrire dans le stencil buffer si les fragments de la scène sont dans une zone d'ombre ou non (+1 dans le buffer pour les quad orientés vers l'avant, -1 pour ceux vers l'arrière). On affiche finalement les pixels qui visibles depuis la source lumineuse, et donc à 0 dans le buffer.<br>
+  Pour bien vérifier les résultats, on peut faire bouger la source lumineuse et observer l'ombre dans des positions différentes :
+</p>
+
+<figure>
+  <img src="resources/shadow_volumes_example1.png" width="400" alt="shadow_volumes_example1" />
+  <figcaption>Ombre portée 1</figcaption>
+</figure>
+
+<figure>
+  <img src="resources/shadow_volumes_example2.png" width="400" alt="shadow_volumes_example2" />
+  <figcaption>Ombre portée 2</figcaption>
+</figure>
+
+<figure>
+  <img src="resources/shadow_volumes_example3.png" width="400" alt="shadow_volumes_example3" />
+  <figcaption>Ombre portée 3</figcaption>
+</figure>
+
+<p>
+  Ces captures d'écran ne contiennent qu'une source lumineuse et n'exploitent donc pas pleinement le potentiel du deferred shading, mais le tout reste parfaitement fonctionnel, et gagnerait un temps significatif avec l'ajout de multiple sources lumineuses.
+</p>
+
+<h2>TD 3 - Interpolation et déformation poly-harmonique</h2>
+
+<p>
+  Afin de mettre en oeuvre différentes applications telles <b>la reconstruction poly-harmonique</b> ou <b>la déformation intéractive</b>, il est utile d'implémenter une matrice Laplacienne et de la résoudre en fonction des informations voulues.</br>
+  Pour cela, une double boucle permettant de visiter tous les sommets et leur voisins suffit. On remplit la matrice avec des 1 aux coordonnées (i, j) pour les sommets qui sont voisins, puis avec l'opposé du nombre de voisins d'un sommet donné pour le coordonnées (i, i). Le reste n'est composé que de 0.</br>
+  Une fois la matrice créée, il s'agit d'isoler seulement les sommets à modifier par le biais d'une permutation dans ils seront placés en premier.</br>
+  Une fois la permutation appliquée, <b>une factorisation de Cholesky</b> permet de calculer les nouveaux attributs des sommets.</br>
+  En mettant à jour la matrice initiale avec ses nouveaux sommets, on devrait arriver à une zone plus uniformisée que ce soit en couleur ou en position.</br>
+  Dans les captures d'écran suivantes, les résultats obtenus semblent être calculées en fonction de paramètres imprévus et donnent des résultats surprenants.
+</p>
+
+<figure>
+  <img src="resources/harmonic_interpolation_positions.png" width="400" alt="harmonic_interpolation_positions" />
+  <figcaption>Interpolation harmonique sur les positions</figcaption>
+</figure>
+
+<figure>
+  <img src="resources/harmonic_interpolation_colors.png" width="400" alt="harmonic_interpolation_colors" />
+  <figcaption>Interpolation harmonique sur les couleurs</figcaption>
+</figure>
+
+</div>
+
+<script type="text/javascript">
+	$('#toc').toc({
+	    'selectors': 'h2,h3,h4', //elements to use as headings
+	    'container': 'body', //element to find all selectors in
+	    'smoothScrolling': true, //enable or disable smooth scrolling on click
+	    'prefix': 'toc', //prefix for anchor tags and class names
+	    'onHighlight': function(el) {}, //called when a new section is highlighted
+	    'highlightOnScroll': true, //add class to heading that is currently in focus
+	    'highlightOffset': 100, //offset to trigger the next headline
+	    'anchorName': function(i, heading, prefix) { //custom function for anchor name
+	        return prefix+i;
+	    },
+	    'headerText': function(i, heading, $heading) { //custom function building the header-item text
+	        return $heading.text();
+	    },
+	'itemClass': function(i, heading, $heading, prefix) { // custom function for item class
+	  return $heading[0].tagName.toLowerCase();
+	}
+	});
+</script>
+
+</body>
